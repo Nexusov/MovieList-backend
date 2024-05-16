@@ -1,6 +1,12 @@
 {
   "dependencies": {
-    "fastify": "^4.27.0"
+    "@fastify/cors": "^9.0.1",
+    "axios": "^1.6.8",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.27.0",
+    "fastify-mongodb": "^4.2.0",
+    "mongoose": "^8.3.4",
+    "redis": "^4.6.13"
   },
   "scripts": {
     "start": "node server.js"
@@ -8,7 +14,6 @@
   "name": "movielist-backend",
   "version": "1.0.0",
   "main": "server.js",
-  "devDependencies": {},
   "author": "",
   "license": "ISC",
   "description": ""
