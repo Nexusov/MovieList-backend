@@ -45,15 +45,47 @@ fastify.get('/user/:id', async (request, reply) => {
   }
 });
 
-// GET MOVIE BY TITLE 
-fastify.get('/movie/search', async (request, reply) => {
+// GET MOVIES BY NAME VIA SEARCH INPUT WITH KINOPOISK
+fastify.get('/kp/movies/search', async (request, reply) => {
+  const movieTitle = request.query.title;
+  console.log(`Received request for movie title: ${movieTitle}`);
+
+  try {
+    const apiURL = process.env.KINOPOISK_API_URL;
+    const apiKey = process.env.KINOPOISK_API_KEY;
+    const response = await axios.get(`${apiURL}movie/search`, {
+      headers: {
+        'X-API-KEY': apiKey
+      },
+      params: {
+        query: movieTitle,
+        limit: 10,
+        page: 1
+      }
+    });
+    const movieData = response.data;
+
+    if (movieData.docs && movieData.docs.length > 0) {
+      reply.cache(3600).send(movieData); // 1h cache
+    } else {
+      return reply.status(404).send({ message: 'Movies not found' });
+    }
+  } catch (err) {
+    console.log(`Error fetching movie with title: ${movieTitle}`, err);
+    fastify.log.error(err);
+    return reply.status(500).send({ message: 'Internal server error' });
+  }
+});
+
+// GET MOVIE BY TITLE FROM OMDB
+fastify.get('/omdb/movie', async (request, reply) => {
   const movieTitle = request.query.title;
   console.log(`Received request for movie title: ${movieTitle}`);
 
   try {
     const apiURL = process.env.OMDB_API_URL;
     const apiKey = process.env.OMDB_API_KEY;
-    const response = await axios.get(`${apiURL}?apikey=${apiKey}&t=${encodeURIComponent(movieTitle)}`);
+    const response = await axios.get(`${apiURL}?apikey=${apiKey}&t=${encodeURIComponent(movieTitle)}&plot=full`);
     const movieData = response.data;
 
     if (movieData.Response === "True") {
@@ -68,7 +100,7 @@ fastify.get('/movie/search', async (request, reply) => {
   }
 });
 
-// GET MOVIE BY IMDb id
+// GET MOVIE BY IMDb ID FROM OMDB
 fastify.get('/movie/:id', async (request, reply) => {
   const movieId = request.params.id;
   console.log(`Received request for movie ID: ${movieId}`);
@@ -76,7 +108,7 @@ fastify.get('/movie/:id', async (request, reply) => {
   try {
     const apiURL = process.env.OMDB_API_URL;
     const apiKey = process.env.OMDB_API_KEY;
-    const response = await axios.get(`${apiURL}?apikey=${apiKey}&i=${encodeURIComponent(movieId)}`);
+    const response = await axios.get(`${apiURL}?apikey=${apiKey}&i=${encodeURIComponent(movieId)}&plot=full`);
     const movieData = response.data;
 
     if (movieData.Response === "True") {
