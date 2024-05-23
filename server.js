@@ -62,15 +62,6 @@ fastify.get('/kp/movies/search', async (request, reply) => {
     const apiURL = process.env.KINOPOISK_API_URL;
     const apiKey = process.env.KINOPOISK_API_KEY;
 
-    const cacheKey = `movie_search_${movieTitle}`;
-
-    // Try to get data from cache
-    const cachedData = await fastify.cache.get(cacheKey);
-    if (cachedData) {
-      console.log('Serving from cache');
-      return reply.send(JSON.parse(cachedData));
-    }
-
     const response = await axios.get(`${apiURL}movie/search`, {
       headers: {
         'X-API-KEY': apiKey
@@ -89,12 +80,14 @@ fastify.get('/kp/movies/search', async (request, reply) => {
         kinopoiskID: movie.id,
         titleEn: movie.alternativeName || null,
         titleRu: movie.name || null,
+        shortDescription: movie.shortDescription || movie.description.split('. ')[0] || null,
         year: movie.year || null,
         posterURL: movie.poster ? movie.poster.url : null,
         ratingKp: movie.rating ? movie.rating.kp : null,
         ratingIMDb: movie.rating ? movie.rating.imdb : null,
-        ratingMetacritic: movie.rating ? movie.rating.filmCritics :null,
-        type: movie.type || null
+        ratingMetacritic: movie.rating ? movie.rating.filmCritics : null,
+        type: movie.type || null,
+        internalVotes: movie.votes.imdb || movie.votes.kp || null
       }));
 
       reply.send({ docs: filteredMovies });
