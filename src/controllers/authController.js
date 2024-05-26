@@ -13,12 +13,12 @@ export const register = async (request, reply) => {
   }
 
   if (!isPasswordStrong(password)) {
-    return reply.status(400).send({ message: 'Password must be at least 8 characters long, contain at least one uppercase letter, one lowercase letter, and one number.' });
+    return reply.status(400).send({ message: 'Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, and one number' });
   }
-
+  
   let user = await User.findOne({ email });
   if (user) {
-    return reply.status(400).send({ message: 'Email is already in use' });
+    return reply.status(400).send({ message: 'User with this email already exists' });
   }
 
   user = await User.findOne({ name });
@@ -34,6 +34,7 @@ export const register = async (request, reply) => {
     email,
     password: hashedPassword,
     role: userRole._id,
+    photo: null,
     watched: [],
     watchList: []
   });
@@ -59,7 +60,7 @@ export const login = async (request, reply) => {
     return reply.status(400).send({ message: 'No account found with this email' });
   }
 
-  if (!user.password) {
+  if (user.googleId) {
     return reply.status(400).send({ message: 'No password set for this account. Please use Google login.' });
   }
   
@@ -73,26 +74,61 @@ export const login = async (request, reply) => {
 };
 
 export const googleCallback = async (request, reply) => {
-  const token = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
-  const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${token.access_token}` }
-  });
-  const profile = await response.json();
-  
-  let user = await User.findOne({ email: profile.email });
-  if (!user) {
-    const userRole = await Role.findOne({ role: 'User' });
-    user = new User({
-      name: profile.name,
-      email: profile.email,
-      googleId: profile.sub,
-      role: userRole._id,
-      watched: [],
-      watchList: []
+  try {
+    console.log('Received Google login callback');
+    const { access_token } = request.query;
+
+    if (!access_token) {
+      throw new Error('No access token provided');
+    }
+
+    console.log('Access token:', access_token);
+
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${access_token}` }
     });
-    await user.save();
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user profile: ${response.statusText}`);
+    }
+
+    const profile = await response.json();
+    console.log('Google profile:', profile);
+
+    if (!profile.email) {
+      throw new Error('Google profile is missing email');
+    }
+
+    let user = await User.findOne({ email: profile.email });
+    if (!user) {
+      const userRole = await Role.findOne({ role: 'User' });
+
+      let username = profile.name;
+      let userExists = await User.findOne({ name: username });
+
+      if (userExists) {
+        username = profile.email;
+      }
+
+      user = new User({
+        name: username,
+        email: profile.email,
+        googleId: profile.sub,
+        role: userRole._id,
+        photo: profile.picture,
+        watched: [],
+        watchList: []
+      });
+      await user.save();
+      console.log('New user created:', user);
+    } else {
+      console.log('Existing user found:', user);
+    }
+
+    const jwtToken = generateToken(user._id);
+    reply.send({ token: jwtToken });
+  } catch (error) {
+    console.error('Error in Google callback:', error);
+    reply.status(500).send({ message: 'Internal Server Error', error: error.message });
   }
-  
-  const jwtToken = generateToken(user._id);
-  reply.send({ token: jwtToken });
 };

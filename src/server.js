@@ -9,6 +9,7 @@ import movieRoutes from './routes/movieRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import debugRoutes from './routes/debugRoutes.js'; 
 import { dbURL, port, jwtSecret, googleClientId, googleClientSecret, googleCallbackURL } from './config/index.js';
+import { authenticate } from './middlewares/authenticate.js';
 
 const fastify = Fastify({ logger: true });
 
@@ -47,8 +48,10 @@ fastify.register(fastifyOauth2, {
     auth: fastifyOauth2.GOOGLE_CONFIGURATION
   },
   startRedirectPath: '/login/google',
-  callbackUri: googleCallbackURL
+  callbackUri: googleCallbackURL,
 });
+
+fastify.decorate('authenticate', authenticate);
 
 fastify.register(authRoutes);
 fastify.register(movieRoutes);

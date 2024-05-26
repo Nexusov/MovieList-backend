@@ -1,27 +1,25 @@
 import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const watchedSchema = new Schema({
-  movie: { type: Schema.Types.ObjectId, ref: 'Movie', required: true },
-  watchedAt: { type: Date, required: true },
-  userRating: { type: Number, min: 0, max: 10 }
-});
-
-const watchListSchema = new Schema({
-  movie: { type: Schema.Types.ObjectId, ref: 'Movie', required: true },
-  addedAt: { type: Date, required: true }
-});
-
-const userSchema = new Schema({
+const userSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String },
-  googleId: { type: String },
-  role: { type: Schema.Types.ObjectId, ref: 'Role', required: true },
-  watched: [watchedSchema],
-  watchList: [watchListSchema]
+  googleId: { type: String, unique: true, sparse: true },
+  photo: { type: String },
+  role: { type: mongoose.Schema.Types.ObjectId, ref: 'Role', required: true },
+  watched: [
+    {
+      movie: { type: mongoose.Schema.Types.ObjectId, ref: 'Movie', required: true },
+      watchedAt: { type: Date, required: true },
+      userRating: { type: Number }
+    }
+  ],
+  watchList: [
+    {
+      movie: { type: mongoose.Schema.Types.ObjectId, ref: 'Movie', required: true },
+      addedAt: { type: Date, required: true }
+    }
+  ]
 });
 
-const User = mongoose.model('User', userSchema);
-export default User;
+export default mongoose.model('User', userSchema);

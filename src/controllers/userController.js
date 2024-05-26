@@ -22,3 +22,12 @@ export const getUserById = async (request, reply) => {
     return reply.status(500).send({ message: 'Internal server error' });
   }
 };
+
+export const getUserProfile = async (request, reply) => {
+  try {
+    const user = await User.findById(request.user._id).select('-password');
+    reply.send(user);
+  } catch (error) {
+    reply.status(500).send({ message: 'Error fetching user profile' });
+  }
+};

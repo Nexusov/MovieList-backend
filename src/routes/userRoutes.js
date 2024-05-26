@@ -1,7 +1,6 @@
-import { getUserById } from '../controllers/userController.js';
+import { getUserById, getUserProfile } from '../controllers/userController.js';
 
-async function userRoutes(fastify, options) {
+export default async function userRoutes(fastify, options) {
   fastify.get('/user/:id', getUserById);
+  fastify.get('/user/profile', { preValidation: [fastify.authenticate] }, getUserProfile);
 }
-
-export default userRoutes;
