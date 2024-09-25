@@ -11,7 +11,8 @@
     "fastify-mongodb": "^4.2.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.4",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "nodemailer": "^6.9.15"
   },
   "scripts": {
     "start": "node src/server.js"
