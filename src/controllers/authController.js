@@ -4,6 +4,7 @@ import User from '../models/userModel.js';
 import Role from '../models/roleModel.js';
 import generateToken from '../utils/generateToken.js';
 import isPasswordStrong from '../utils/isPasswordStrong.js';
+import { sendWelcomeEmail } from '../services/emailService.js';
 
 export const register = async (request, reply) => {
 	const { name, email, password } = request.body;

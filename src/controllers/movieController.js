@@ -7,6 +7,7 @@ import {
 	kinopoiskApiKey,
 } from '../config/index.js';
 import { isValidIMDbID } from '../utils/validators.js';
+import User from '../models/userModel.js';
 
 export const getMovieById = async (request, reply) => {
 	const movieId = request.params.id;
@@ -150,43 +151,122 @@ export const getMovieByTitle = async (request, reply) => {
 	}
 };
 
-// Функция для поиска фильма в базе данных и добавления его, если его нет
-export const findOrCreateMovie = async (kinopoiskID) => {
-	console.log(`Looking for movie with Kinopoisk ID: ${kinopoiskID}`);
+export const addMovieToUserList = async (request, reply) => {
+	const { id: movieId, action } = request.body;
+	const userId = request.user._id;
 
-	let movie = await Movie.findOne({ kinopoiskID });
+	console.log(
+		`Received request to add movie ID: ${movieId} to user ${userId} under action: ${action}`
+	);
 
-	if (!movie) {
-		console.log('Movie not found in DB, fetching from Kinopoisk API...');
+	try {
+		// Ищем фильм в базе данных по imdbID
+		let movie = await Movie.findOne({ imdbID: movieId });
 
-		const response = await axios.get(`${kinopoiskApiUrl}films${kinopoiskID}`, {
-			headers: { 'X-API-KEY': kinopoiskApiUrl },
-			params: { searchId: kinopoiskID },
-		});
+		// Если фильм не найден в базе, загружаем данные из внешних API и сохраняем в базу
+		if (!movie) {
+			const [omdbResponse, kpResponse] = await Promise.all([
+				axios.get(
+					`${omdbApiUrl}?apikey=${omdbApiKey}&i=${encodeURIComponent(
+						movieId
+					)}&plot=full`
+				),
+				axios.get(`${kinopoiskApiUrl}movie`, {
+					headers: { 'X-API-KEY': kinopoiskApiKey },
+					params: { 'externalId.imdb': movieId, limit: 1 },
+				}),
+			]);
 
-		const kpData = response.data;
+			const omdbData = omdbResponse.data;
+			const kpData = kpResponse.data.docs[0];
 
-		console.log('Kinopoisk response:', kpData);
+			if (omdbData.Response !== 'True' || !kpData) {
+				return reply
+					.status(404)
+					.send({ message: 'Movie not found in external sources' });
+			}
 
-		if (!kpData || !kpData.id) {
-			throw new Error('Movie not found in Kinopoisk API');
+			// Создаем новый объект фильма на основе данных из OMDb и Кинопоиска
+			movie = await Movie.create({
+				imdbID: omdbData.imdbID,
+				kinopoiskID: kpData.id,
+				titleEn: omdbData.Title,
+				titleRu: kpData.name,
+				alternativeName: kpData.alternativeName || null,
+				year: omdbData.Year,
+				releasedDate: omdbData.Released,
+				runtime: parseInt(omdbData.Runtime) || parseInt(kpData.movieLength),
+				director: omdbData.Director,
+				writer: omdbData.Writer,
+				descriptionEn: omdbData.Plot,
+				shortDescrEn: omdbData.Plot.split('. ')[0],
+				descriptionRu: kpData.description,
+				shortDescrRu:
+					kpData.shortDescription || kpData.description.split('. ')[0],
+				ratingKp: parseFloat(kpData.rating.kp.toFixed(1)),
+				ratingIMDb: parseFloat(omdbData.imdbRating.toFixed(1)),
+				ratingMetacritic: parseFloat(omdbData.Metascore.toFixed(1)),
+				posterURL: omdbData.Poster,
+				previewUrl: kpData.poster.previewUrl || null,
+				genres: omdbData.Genre.split(', '),
+				type: kpData.type,
+				isSeries: kpData.isSeries,
+				totalSeasons: kpData.totalSeasons || null,
+			});
+
+			console.log(`New movie added to DB: ${movieId}`);
+			console.log(movie);
 		}
 
-		movie = new Movie({
-			kinopoiskID: kpData.id,
-			titleEn: kpData.alternativeName || null,
-			titleRu: kpData.name || null,
-			shortDescrRu: kpData.description || null,
-			posterURL: kpData.poster ? kpData.poster.url : null,
-			year: kpData.year || null,
-			ratingKp: kpData.rating ? kpData.rating.kp : null,
-		});
+		// Ищем пользователя по userId
+		const user = await User.findById(userId);
 
-		await movie.save();
-		console.log('Movie saved to DB:', movie);
-	} else {
-		console.log('Movie found in DB:', movie);
+		if (!user) {
+			return reply.status(404).send({ message: 'User not found' });
+		}
+
+		// Проверяем тип действия (watchLater или watchHistory)
+		if (action === 'watchLater') {
+			// Проверяем, есть ли фильм уже в watchLater
+			const alreadyInWatchLater = user.watchList.some(
+				(entry) => entry.movie.toString() === movie._id.toString()
+			);
+			if (alreadyInWatchLater) {
+				return reply
+					.status(400)
+					.send({ message: 'Movie is already in the watch later list' });
+			}
+
+			// Добавляем фильм в watchLater
+			user.watchList.push({ movie: movie._id, addedAt: new Date() });
+			console.log(`Movie added to watch later list for user: ${userId}`);
+		} else if (action === 'watchHistory') {
+			// Проверяем, есть ли фильм уже в watched
+			const alreadyWatched = user.watched.some(
+				(entry) => entry.movie.toString() === movie._id.toString()
+			);
+			if (alreadyWatched) {
+				return reply
+					.status(400)
+					.send({ message: 'Movie is already in the watch history' });
+			}
+
+			// Добавляем фильм в watched
+			user.watched.push({ movie: movie._id, watchedAt: new Date() });
+			console.log(`Movie added to watch history for user: ${userId}`);
+		} else {
+			return reply.status(400).send({ message: 'Invalid action' });
+		}
+
+		// Сохраняем изменения пользователя
+		await user.save();
+
+		reply
+			.status(200)
+			.send({ message: 'Movie successfully added to user list', user });
+	} catch (err) {
+		console.log(`Error adding movie to user list for user: ${userId}`, err);
+		fastify.log.error(err);
+		return reply.status(500).send({ message: 'Internal server error' });
 	}
-
-	return movie;
 };
